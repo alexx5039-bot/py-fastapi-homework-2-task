@@ -1,3 +1,12 @@
+from src.database.models import (
+    Base,
+    MovieModel,
+    ActorModel,
+    LanguageModel,
+)
+
+from src.database.session_sqlite import reset_sqlite_database as reset_database
+
 import os
 
 environment = os.getenv("ENVIRONMENT", "developing")
@@ -13,4 +22,12 @@ else:
         get_postgresql_db as get_db,
     )
 
-__all__ = ["get_db", "get_db_contextmanager"]
+__all__ = [
+    "Base",
+    "MovieModel",
+    "ActorModel",
+    "LanguageModel",
+    "get_db",
+    "get_db_contextmanager",
+    "reset_database",
+]
