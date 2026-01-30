@@ -1,11 +1,22 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from src.database.models import MovieModel, CountryModel, GenreModel, ActorModel, LanguageModel
-from src.database.session_sqlite import get_sqlite_db
-from src.schemas.movies import MoviesListResponse, MovieResponseSchema, MovieCreateSchema, MovieUpdateSchema
 from sqlalchemy.orm import selectinload
+
+from src.database.models import (
+    MovieModel,
+    CountryModel,
+    GenreModel,
+    ActorModel,
+    LanguageModel,
+)
+from src.database.session_sqlite import get_sqlite_db
+from src.schemas.movies import (
+    MoviesListResponse,
+    MovieResponseSchema,
+    MovieCreateSchema,
+    MovieUpdateSchema,
+)
 
 router = APIRouter(prefix="/movies", tags=["Movies"])
 
@@ -16,11 +27,9 @@ async def list_movies(
     per_page: int = Query(10, ge=1, le=20),
     db: AsyncSession = Depends(get_sqlite_db),
 ):
-
-    total_items_result = await db.execute(
-        select(func.count(MovieModel.id))
-    )
-    total_items = total_items_result.scalar_one()
+    total_items = (
+        await db.execute(select(func.count(MovieModel.id)))
+    ).scalar_one()
 
     if total_items == 0:
         raise HTTPException(
@@ -33,7 +42,7 @@ async def list_movies(
     if page > total_pages:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="No movies found.",
+            detail="Page not found.",
         )
 
     offset = (page - 1) * per_page
@@ -47,24 +56,15 @@ async def list_movies(
 
     movies = result.scalars().all()
 
-    if not movies:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No movies found.",
-        )
-
     base_url = "/theater/movies/"
 
     prev_page = (
         f"{base_url}?page={page - 1}&per_page={per_page}"
-        if page > 1
-        else None
+        if page > 1 else None
     )
-
     next_page = (
         f"{base_url}?page={page + 1}&per_page={per_page}"
-        if page < total_pages
-        else None
+        if page < total_pages else None
     )
 
     return MoviesListResponse(
@@ -95,8 +95,8 @@ async def get_or_create(db: AsyncSession, model, **kwargs):
     status_code=status.HTTP_201_CREATED,
 )
 async def create_movie(
-        movie_data: MovieCreateSchema,
-        db: AsyncSession = Depends(get_sqlite_db),
+    movie_data: MovieCreateSchema,
+    db: AsyncSession = Depends(get_sqlite_db),
 ):
     existing_movie = await db.execute(
         select(MovieModel).where(
@@ -104,10 +104,14 @@ async def create_movie(
             MovieModel.date == movie_data.date,
         )
     )
+
     if existing_movie.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"A movie with the name '{movie_data.name}' and release date '{movie_data.date}' already exists.",
+            detail=(
+                f"A movie with the name '{movie_data.name}' "
+                f"and release date '{movie_data.date}' already exists."
+            ),
         )
 
     country = await get_or_create(
@@ -115,6 +119,21 @@ async def create_movie(
         CountryModel,
         code=movie_data.country,
     )
+
+    genres = [
+        await get_or_create(db, GenreModel, name=name)
+        for name in movie_data.genres
+    ]
+
+    actors = [
+        await get_or_create(db, ActorModel, name=name)
+        for name in movie_data.actors
+    ]
+
+    languages = [
+        await get_or_create(db, LanguageModel, name=name)
+        for name in movie_data.languages
+    ]
 
     movie = MovieModel(
         name=movie_data.name,
@@ -125,25 +144,26 @@ async def create_movie(
         budget=movie_data.budget,
         revenue=movie_data.revenue,
         country=country,
+        genres=genres,
+        actors=actors,
+        languages=languages,
     )
+
     db.add(movie)
-    await db.flush()
-
-    for genre_name in movie_data.genres:
-        genre = await get_or_create(db, GenreModel, name=genre_name)
-        movie.genres.append(genre)
-
-    for actor_name in movie_data.actors:
-        actor = await get_or_create(db, ActorModel, name=actor_name)
-        movie.actors.append(actor)
-
-    for language_name in movie_data.languages:
-        language = await get_or_create(db, LanguageModel, name=language_name)
-        movie.languages.append(language)
-
     await db.commit()
-    await db.refresh(movie)
 
+    result = await db.execute(
+        select(MovieModel)
+        .where(MovieModel.id == movie.id)
+        .options(
+            selectinload(MovieModel.country),
+            selectinload(MovieModel.genres),
+            selectinload(MovieModel.actors),
+            selectinload(MovieModel.languages),
+        )
+    )
+
+    movie = result.scalar_one()
     return movie
 
 
