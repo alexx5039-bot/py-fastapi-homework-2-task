@@ -27,8 +27,8 @@ class MoviesListResponse(BaseModel):
 class MovieCreateSchema(BaseModel):
     name: str = Field(max_length=255)
     date: date
-    score: float | None = Field(default=None, ge=0, le=100)
-    overview: str | None = None
+    score: float = Field(ge=0, le=100)
+    overview: str
     status: str
     budget: float = Field(ge=0)
     revenue: float = Field(ge=0)
@@ -65,8 +65,8 @@ class MovieResponseSchema(BaseModel):
     id: int
     name: str
     date: date
-    score: float | None
-    overview: str | None
+    score: float
+    overview: str
     status: str
     budget: float
     revenue: float

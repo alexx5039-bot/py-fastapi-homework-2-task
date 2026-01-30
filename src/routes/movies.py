@@ -10,7 +10,7 @@ from src.database.models import (
     ActorModel,
     LanguageModel,
 )
-from src.database.session_sqlite import get_sqlite_db
+from src.database import get_db
 from src.schemas.movies import (
     MoviesListResponse,
     MovieResponseSchema,
@@ -25,7 +25,7 @@ router = APIRouter(prefix="/movies", tags=["Movies"])
 async def list_movies(
     page: int = Query(1, ge=1),
     per_page: int = Query(10, ge=1, le=20),
-    db: AsyncSession = Depends(get_sqlite_db),
+    db: AsyncSession = Depends(get_db),
 ):
     total_items = (
         await db.execute(select(func.count(MovieModel.id)))
@@ -96,7 +96,7 @@ async def get_or_create(db: AsyncSession, model, **kwargs):
 )
 async def create_movie(
     movie_data: MovieCreateSchema,
-    db: AsyncSession = Depends(get_sqlite_db),
+    db: AsyncSession = Depends(get_db),
 ):
     existing_movie = await db.execute(
         select(MovieModel).where(
@@ -173,7 +173,7 @@ async def create_movie(
 )
 async def get_movie_details(
     movie_id: int,
-    db: AsyncSession = Depends(get_sqlite_db),
+    db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
         select(MovieModel)
@@ -203,7 +203,7 @@ async def get_movie_details(
 )
 async def delete_movie(
     movie_id: int,
-    db: AsyncSession = Depends(get_sqlite_db),
+    db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
         select(MovieModel).where(MovieModel.id == movie_id)
@@ -227,7 +227,7 @@ async def delete_movie(
 async def update_movie(
     movie_id: int,
     movie_data: MovieUpdateSchema,
-    db: AsyncSession = Depends(get_sqlite_db),
+    db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
         select(MovieModel).where(MovieModel.id == movie_id)
@@ -242,15 +242,9 @@ async def update_movie(
 
     update_data = movie_data.model_dump(exclude_unset=True)
 
-    try:
-        for field, value in update_data.items():
-            setattr(movie, field, value)
+    for field, value in update_data.items():
+        setattr(movie, field, value)
 
-        await db.commit()
-    except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid input data.",
-        )
+    await db.commit()
 
     return {"detail": "Movie updated successfully."}
